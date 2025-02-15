@@ -12,16 +12,6 @@
             display: flex;
             height: 100vh;
             margin: 0;
-            align-items: center;
-            justify-content: center;
-        }
-        #login {
-            text-align: center;
-        }
-        #journal {
-            display: none;
-            width: 100%;
-            height: 100%;
         }
         #sidebar {
             width: 20%;
@@ -39,46 +29,32 @@
             color: white;
             border: 1px solid gray;
         }
+        input {
+            width: 100%;
+            background-color: black;
+            color: white;
+            border: 1px solid gray;
+            padding: 5px;
+        }
+        .delete-btn {
+            color: red;
+            cursor: pointer;
+            margin-left: 10px;
+        }
     </style>
-    <script>
-        async function hashPassword(password) {
-            const encoder = new TextEncoder();
-            const data = encoder.encode(password);
-            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-            const hashArray = Array.from(new Uint8Array(hashBuffer));
-            return hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('');
-        }
-
-        async function checkPassword() {
-            const storedHash = "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8"; // SHA-256 hash of "password"
-            const inputPassword = document.getElementById('password').value;
-            const inputHash = await hashPassword(inputPassword);
-            if (inputHash === storedHash) {
-                document.getElementById('login').style.display = 'none';
-                document.getElementById('journal').style.display = 'flex';
-            } else {
-                alert('Incorrect password');
-            }
-        }
-    </script>
 </head>
 <body>
-    <div id="login">
-        <h2>Enter Password</h2>
-        <input type="password" id="password">
-        <button onclick="checkPassword()">Submit</button>
+    <div id="sidebar">
+        <h3>Journal Entries</h3>
+        <input type="text" id="search-tags" placeholder="Search tags..." oninput="filterByTag()">
+        <ul id="entries-list"></ul>
+        <button onclick="saveEntry()">Save Entry</button>
     </div>
-    <div id="journal">
-        <div id="sidebar">
-            <h3>Journal Entries</h3>
-            <ul id="entries-list"></ul>
-            <button onclick="saveEntry()">Save Entry</button>
-        </div>
-        <div id="content">
-            <input type="text" id="date" placeholder="YYYY-MM-DD">
-            <input type="text" id="tags" placeholder="Tags (comma-separated)">
-            <textarea id="entry" placeholder="Write your journal entry here..."></textarea>
-        </div>
+    <div id="content">
+        <input type="text" id="date" placeholder="YYYY-MM-DD">
+        <input type="text" id="tags" placeholder="Tags (comma-separated)" oninput="suggestTags()">
+        <div id="tag-suggestions" style="background-color: gray; color: black; display: none;"></div>
+        <textarea id="entry" placeholder="Write your journal entry here..."></textarea>
     </div>
     <script>
         function saveEntry() {
@@ -101,7 +77,7 @@
                 let key = localStorage.key(i);
                 let entry = JSON.parse(localStorage.getItem(key));
                 let li = document.createElement('li');
-                li.innerHTML = `<a href="#" onclick="loadEntry('${key}')">${key}</a>`;
+                li.innerHTML = `<a href="#" onclick="loadEntry('${key}')">${key}</a> <span class='delete-btn' onclick="deleteEntry('${key}')">✖</span>`;
                 entriesList.appendChild(li);
             }
         }
@@ -111,6 +87,51 @@
             document.getElementById('date').value = entry.date;
             document.getElementById('tags').value = entry.tags;
             document.getElementById('entry').value = entry.entry;
+        }
+
+        function deleteEntry(date) {
+            if (confirm("Are you sure you want to delete this entry?")) {
+                localStorage.removeItem(date);
+                loadEntries();
+            }
+        }
+
+        function filterByTag() {
+            let searchQuery = document.getElementById('search-tags').value.toLowerCase();
+            let entriesList = document.getElementById('entries-list');
+            entriesList.innerHTML = '';
+            for (let i = 0; i < localStorage.length; i++) {
+                let key = localStorage.key(i);
+                let entry = JSON.parse(localStorage.getItem(key));
+                if (entry.tags.toLowerCase().includes(searchQuery)) {
+                    let li = document.createElement('li');
+                    li.innerHTML = `<a href="#" onclick="loadEntry('${key}')">${key}</a> <span class='delete-btn' onclick="deleteEntry('${key}')">✖</span>`;
+                    entriesList.appendChild(li);
+                }
+            }
+        }
+
+        function suggestTags() {
+            let tagInput = document.getElementById('tags');
+            let suggestions = document.getElementById('tag-suggestions');
+            let existingTags = new Set();
+            for (let i = 0; i < localStorage.length; i++) {
+                let entry = JSON.parse(localStorage.getItem(localStorage.key(i)));
+                entry.tags.split(',').forEach(tag => existingTags.add(tag.trim()));
+            }
+            let query = tagInput.value.toLowerCase();
+            let matches = Array.from(existingTags).filter(tag => tag.toLowerCase().startsWith(query));
+            if (matches.length > 0) {
+                suggestions.innerHTML = matches.map(tag => `<div onclick="selectTag('${tag}')">${tag}</div>`).join('');
+                suggestions.style.display = 'block';
+            } else {
+                suggestions.style.display = 'none';
+            }
+        }
+
+        function selectTag(tag) {
+            document.getElementById('tags').value = tag;
+            document.getElementById('tag-suggestions').style.display = 'none';
         }
 
         loadEntries();
