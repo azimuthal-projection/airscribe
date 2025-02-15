@@ -13,6 +13,16 @@
             height: 100vh;
             margin: 0;
         }
+        #login {
+            width: 100%;
+            text-align: center;
+            margin-top: 20vh;
+        }
+        #journal {
+            display: none;
+            width: 100%;
+            height: 100%;
+        }
         #sidebar {
             width: 20%;
             padding: 10px;
@@ -42,19 +52,47 @@
             margin-left: 10px;
         }
     </style>
+    <script>
+        async function hashPassword(password) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(password);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('');
+        }
+
+        async function checkPassword() {
+            const storedHash = "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8"; // SHA-256 hash of "password"
+            const inputPassword = document.getElementById('password').value;
+            const inputHash = await hashPassword(inputPassword);
+            if (inputHash === storedHash) {
+                document.getElementById('login').style.display = 'none';
+                document.getElementById('journal').style.display = 'flex';
+            } else {
+                alert('Incorrect password');
+            }
+        }
+    </script>
 </head>
 <body>
-    <div id="sidebar">
-        <h3>Journal Entries</h3>
-        <input type="text" id="search-tags" placeholder="Search tags..." oninput="filterByTag()">
-        <ul id="entries-list"></ul>
-        <button onclick="saveEntry()">Save Entry</button>
+    <div id="login">
+        <h2>Enter Password</h2>
+        <input type="password" id="password">
+        <button onclick="checkPassword()">Submit</button>
     </div>
-    <div id="content">
-        <input type="text" id="date" placeholder="YYYY-MM-DD">
-        <input type="text" id="tags" placeholder="Tags (comma-separated)" oninput="suggestTags()">
-        <div id="tag-suggestions" style="background-color: gray; color: black; display: none;"></div>
-        <textarea id="entry" placeholder="Write your journal entry here..."></textarea>
+    <div id="journal">
+        <div id="sidebar">
+            <h3>Journal Entries</h3>
+            <input type="text" id="search-tags" placeholder="Search tags..." oninput="filterByTag()">
+            <ul id="entries-list"></ul>
+            <button onclick="saveEntry()">Save Entry</button>
+        </div>
+        <div id="content">
+            <input type="text" id="date" placeholder="YYYY-MM-DD">
+            <input type="text" id="tags" placeholder="Tags (comma-separated)" oninput="suggestTags()">
+            <div id="tag-suggestions" style="background-color: gray; color: black; display: none;"></div>
+            <textarea id="entry" placeholder="Write your journal entry here..."></textarea>
+        </div>
     </div>
     <script>
         function saveEntry() {
