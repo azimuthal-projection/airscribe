@@ -50,7 +50,7 @@
         }
 
         async function checkPassword() {
-            const storedHash = "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd15206c4b0abdc4d61"; // SHA-256 hash of "password"
+            const storedHash = "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8"; // SHA-256 hash of "password"
             const inputPassword = document.getElementById('password').value;
             const inputHash = await hashPassword(inputPassword);
             if (inputHash === storedHash) {
