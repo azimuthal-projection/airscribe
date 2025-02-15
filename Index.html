@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Private Journal</title>
+    <style>
+        body {
+            background-color: black;
+            color: white;
+            font-family: monospace;
+            display: flex;
+            height: 100vh;
+            margin: 0;
+            align-items: center;
+            justify-content: center;
+        }
+        #login {
+            text-align: center;
+        }
+        #journal {
+            display: none;
+            width: 100%;
+            height: 100%;
+        }
+        #sidebar {
+            width: 20%;
+            padding: 10px;
+            border-right: 1px solid gray;
+        }
+        #content {
+            width: 80%;
+            padding: 10px;
+        }
+        textarea {
+            width: 100%;
+            height: 300px;
+            background-color: black;
+            color: white;
+            border: 1px solid gray;
+        }
+    </style>
+    <script>
+        async function hashPassword(password) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(password);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('');
+        }
+
+        async function checkPassword() {
+            const storedHash = "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd15206c4b0abdc4d61"; // SHA-256 hash of "password"
+            const inputPassword = document.getElementById('password').value;
+            const inputHash = await hashPassword(inputPassword);
+            if (inputHash === storedHash) {
+                document.getElementById('login').style.display = 'none';
+                document.getElementById('journal').style.display = 'flex';
+            } else {
+                alert('Incorrect password');
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="login">
+        <h2>Enter Password</h2>
+        <input type="password" id="password">
+        <button onclick="checkPassword()">Submit</button>
+    </div>
+    <div id="journal">
+        <div id="sidebar">
+            <h3>Journal Entries</h3>
+            <ul id="entries-list"></ul>
+            <button onclick="saveEntry()">Save Entry</button>
+        </div>
+        <div id="content">
+            <input type="text" id="date" placeholder="YYYY-MM-DD">
+            <input type="text" id="tags" placeholder="Tags (comma-separated)">
+            <textarea id="entry" placeholder="Write your journal entry here..."></textarea>
+        </div>
+    </div>
+    <script>
+        function saveEntry() {
+            let date = document.getElementById('date').value;
+            let tags = document.getElementById('tags').value;
+            let entry = document.getElementById('entry').value;
+            if (!date || !entry) {
+                alert("Date and entry are required");
+                return;
+            }
+            let entryData = { date, tags, entry };
+            localStorage.setItem(date, JSON.stringify(entryData));
+            loadEntries();
+        }
+
+        function loadEntries() {
+            let entriesList = document.getElementById('entries-list');
+            entriesList.innerHTML = '';
+            for (let i = 0; i < localStorage.length; i++) {
+                let key = localStorage.key(i);
+                let entry = JSON.parse(localStorage.getItem(key));
+                let li = document.createElement('li');
+                li.innerHTML = `<a href="#" onclick="loadEntry('${key}')">${key}</a>`;
+                entriesList.appendChild(li);
+            }
+        }
+
+        function loadEntry(date) {
+            let entry = JSON.parse(localStorage.getItem(date));
+            document.getElementById('date').value = entry.date;
+            document.getElementById('tags').value = entry.tags;
+            document.getElementById('entry').value = entry.entry;
+        }
+
+        loadEntries();
+    </script>
+</body>
+</html>
