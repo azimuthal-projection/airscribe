@@ -42,3 +42,347 @@
         input {
             width: 100%;
             background-color: black;
+            color: white;
+            border: 1px solid gray;
+            padding: 5px;
+        }
+        .delete-btn {
+            color: red;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        /* Tag Suggestion Box */
+        #tag-suggestions {
+            position: absolute;
+            background-color: #333;
+            color: #fff;
+            border: 1px solid gray;
+            margin-top: 2px;
+            display: none;
+            z-index: 9999;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        #tag-suggestions div {
+            padding: 5px;
+            cursor: pointer;
+        }
+        #tag-suggestions div:hover {
+            background-color: #555;
+        }
+    </style>
+    <script>
+        /* ==========================================================
+         CONFIGURE THESE VALUES FOR YOUR SETUP
+        =========================================================== */
+        const GITHUB_USERNAME = "your-username";
+        const REPO_NAME = "your-repo-name";
+        const BRANCH = "main";
+        const TOKEN = "your-personal-access-token"; // Update every 30 days
+
+        /* If you changed your password's SHA-256 hash, update below */
+        async function hashPassword(password) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(password);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('');
+        }
+        const storedHash = "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8"; // Provided by user
+
+        /* ==========================================================
+         GLOBAL VARIABLES
+        =========================================================== */
+        let allEntries = []; // Will store all entries (date, tags, content)
+        let allTags = new Set();
+
+        /* ==========================================================
+         AUTH & PASSWORD CHECK
+        =========================================================== */
+        async function checkPassword() {
+            const inputPassword = document.getElementById('password').value;
+            const inputHash = await hashPassword(inputPassword);
+            if (inputHash === storedHash) {
+                document.getElementById('login').style.display = 'none';
+                document.getElementById('journal').style.display = 'flex';
+                fetchAllEntries();
+            } else {
+                alert('Incorrect password');
+            }
+        }
+
+        /* ==========================================================
+         FETCH ALL ENTRIES (FILES) FROM GITHUB
+        =========================================================== */
+        async function fetchAllEntries() {
+            const url = `https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/entries?ref=${BRANCH}`;
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        Authorization: `token ${TOKEN}`
+                    }
+                });
+                if (!response.ok) {
+                    console.error("Failed to fetch file list", response.status, response.statusText);
+                    return;
+                }
+                const files = await response.json();
+
+                // Clear UI lists
+                const entriesList = document.getElementById('entries-list');
+                entriesList.innerHTML = '';
+                allEntries = [];
+                allTags.clear(); // reset tags
+
+                // For each file, fetch the JSON content
+                for (const file of files) {
+                    if (file.name.endsWith('.json')) {
+                        const entryData = await fetchEntryContent(file.name);
+                        if (entryData) {
+                            // Keep track of the entry
+                            allEntries.push(entryData);
+
+                            // Populate the tags set
+                            let tagArray = entryData.tags ? entryData.tags.split(',').map(t => t.trim()) : [];
+                            for (let t of tagArray) {
+                                if (t) allTags.add(t);
+                            }
+
+                            // Add to the sidebar list
+                            let li = document.createElement('li');
+                            li.innerHTML = `<a href='#' onclick="loadEntry('${file.name}')">${file.name.replace('.json','')}</a>
+                                           <span class='delete-btn' onclick="deleteEntry('${file.name}')">✖</span>`;
+                            entriesList.appendChild(li);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error("Error fetching entries:", err);
+            }
+        }
+
+        /* ==========================================================
+         FETCH A SINGLE ENTRY'S CONTENT
+        =========================================================== */
+        async function fetchEntryContent(filename) {
+            const url = `https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/entries/${filename}?ref=${BRANCH}`;
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        Authorization: `token ${TOKEN}`
+                    }
+                });
+                if (!response.ok) {
+                    console.error("Failed to fetch", filename, response.status, response.statusText);
+                    return null;
+                }
+                const file = await response.json();
+                const content = JSON.parse(atob(file.content));
+                return content; // { date, tags, entry }
+            } catch (err) {
+                console.error("Error fetching file content:", err);
+                return null;
+            }
+        }
+
+        /* ==========================================================
+         LOAD ENTRY INTO FORM (EDIT MODE)
+        =========================================================== */
+        async function loadEntry(filename) {
+            const data = await fetchEntryContent(filename);
+            if (data) {
+                document.getElementById('date').value = data.date;
+                document.getElementById('tags').value = data.tags;
+                document.getElementById('entry').value = data.entry;
+            }
+        }
+
+        /* ==========================================================
+         SAVE OR UPDATE ENTRY
+        =========================================================== */
+        async function saveEntry() {
+            let date = document.getElementById('date').value;
+            let tags = document.getElementById('tags').value;
+            let entry = document.getElementById('entry').value;
+            if (!date || !entry) {
+                alert("Date and entry are required");
+                return;
+            }
+            const data = {
+                date, tags, entry
+            };
+            const content = btoa(JSON.stringify(data, null, 2));
+            const url = `https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/entries/${date}.json`;
+            try {
+                const response = await fetch(url, {
+                    method: 'PUT',
+                    headers: {
+                        Authorization: `token ${TOKEN}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: `Add/update entry ${date}`,
+                        content,
+                        branch: BRANCH
+                    })
+                });
+                if (!response.ok) {
+                    alert("Failed to save entry. Check console.");
+                    console.error(await response.json());
+                } else {
+                    // Refresh the list of entries
+                    fetchAllEntries();
+                    // Clear form
+                    document.getElementById('date').value = '';
+                    document.getElementById('tags').value = '';
+                    document.getElementById('entry').value = '';
+                }
+            } catch (err) {
+                console.error("Error saving entry:", err);
+            }
+        }
+
+        /* ==========================================================
+         DELETE ENTRY
+        =========================================================== */
+        async function deleteEntry(filename) {
+            if (!confirm("Are you sure you want to delete this entry?")) return;
+            const url = `https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/entries/${filename}`;
+            try {
+                // We need the file's SHA to delete
+                // Let's fetch the file data first
+                const getResponse = await fetch(url, {
+                    headers: { Authorization: `token ${TOKEN}` }
+                });
+                if (!getResponse.ok) {
+                    alert("Unable to find file to delete.");
+                    return;
+                }
+                const fileData = await getResponse.json();
+                const sha = fileData.sha;
+
+                const response = await fetch(url, {
+                    method: 'DELETE',
+                    headers: {
+                        Authorization: `token ${TOKEN}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: `Delete entry ${filename}`,
+                        branch: BRANCH,
+                        sha
+                    })
+                });
+                if (response.ok) {
+                    fetchAllEntries();
+                } else {
+                    console.error("Delete failed", response.status, response.statusText);
+                }
+            } catch (err) {
+                console.error("Error deleting entry:", err);
+            }
+        }
+
+        /* ==========================================================
+         TAG SEARCH & AUTOCOMPLETE
+        =========================================================== */
+        function filterEntriesByTag() {
+            const searchInput = document.getElementById('search-tags').value.toLowerCase().trim();
+            const entriesList = document.getElementById('entries-list');
+            entriesList.innerHTML = '';
+
+            // Filter in-memory entries by tag
+            const filteredEntries = allEntries.filter(e => {
+                if (!e.tags) return false;
+                return e.tags.toLowerCase().includes(searchInput);
+            });
+
+            for (const entry of filteredEntries) {
+                const filename = entry.date + '.json';
+                let li = document.createElement('li');
+                li.innerHTML = `<a href='#' onclick="loadEntry('${filename}')">${entry.date}</a>
+                                <span class='delete-btn' onclick="deleteEntry('${filename}')">✖</span>`;
+                entriesList.appendChild(li);
+            }
+        }
+
+        // We'll show tag suggestions while typing in the tags field
+        function suggestTags() {
+            const tagInput = document.getElementById('tags');
+            const suggestionsBox = document.getElementById('tag-suggestions');
+
+            const query = tagInput.value.toLowerCase().trim();
+            if (!query) {
+                suggestionsBox.style.display = 'none';
+                return;
+            }
+
+            let matches = Array.from(allTags).filter(t => t.toLowerCase().startsWith(query));
+            if (matches.length === 0) {
+                suggestionsBox.style.display = 'none';
+                return;
+            }
+
+            // Position suggestions box near the input
+            const rect = tagInput.getBoundingClientRect();
+            suggestionsBox.style.position = 'absolute';
+            suggestionsBox.style.left = rect.left + 'px';
+            suggestionsBox.style.top = (rect.bottom + window.scrollY) + 'px';
+            suggestionsBox.style.width = rect.width + 'px';
+
+            suggestionsBox.innerHTML = '';
+            matches.forEach(tag => {
+                const div = document.createElement('div');
+                div.textContent = tag;
+                div.onclick = () => {
+                    selectTag(tag);
+                };
+                suggestionsBox.appendChild(div);
+            });
+
+            suggestionsBox.style.display = 'block';
+        }
+
+        function selectTag(tag) {
+            const tagInput = document.getElementById('tags');
+            tagInput.value = tag;
+            document.getElementById('tag-suggestions').style.display = 'none';
+        }
+
+        /* ==========================================================
+         ONLOAD INITIALIZATION
+        =========================================================== */
+        // No need to fetch entries on page load until password is validated.
+        // We'll fetchAllEntries() after successful password.
+    </script>
+</head>
+<body>
+    <!-- PASSWORD PROMPT -->
+    <div id="login">
+        <h2>Enter Password</h2>
+        <input type="password" id="password" />
+        <button onclick="checkPassword()">Submit</button>
+    </div>
+
+    <!-- MAIN JOURNAL AFTER LOGIN -->
+    <div id="journal">
+        <!-- SIDEBAR: SEARCH & LIST OF ENTRIES -->
+        <div id="sidebar">
+            <h3>Journal Entries</h3>
+            <input type="text" id="search-tags" placeholder="Search tags..." oninput="filterEntriesByTag()" />
+            <ul id="entries-list"></ul>
+            <button onclick="saveEntry()">Save Entry</button>
+        </div>
+
+        <!-- CONTENT AREA: DATE, TAGS, TEXT -->
+        <div id="content">
+            <input type="text" id="date" placeholder="YYYY-MM-DD" />
+            <div style="position: relative;">
+                <input type="text" id="tags" placeholder="Tags (comma-separated)" oninput="suggestTags()" />
+                <div id="tag-suggestions"></div>
+            </div>
+            <textarea id="entry" placeholder="Write your journal entry here..."></textarea>
+        </div>
+    </div>
+</body>
+</html>
